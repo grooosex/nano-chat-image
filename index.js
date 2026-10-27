@@ -488,33 +488,121 @@ async function writeTags(params, brief, signal) {
 }
 
 async function customComplete(s, system, user, maxTokens, signal) {
-    let url = (s.writerBase || '').trim().replace(/\/+$/, '');
-    if (!url) throw new Error('还没填专用写词接口');
-    if (!/\/chat\/completions$/i.test(url)) {
+    const base = (s.writerBase || '').trim().replace(/\/+$/, '');
+    if (!base) throw new Error('还没填专用写词接口');
+    if (!s.writerModel) throw new Error('还没选写词模型，先点连接');
+    const anthropic = /\/anthropic\b/i.test(base);
+    let url = base.replace(/\/(chat\/completions|messages)$/i, '');
+    const headers = { 'Content-Type': 'application/json' };
+    let body;
+    if (anthropic) {
+        if (!/\/v1$/i.test(url)) url += '/v1';
+        url += '/messages';
+        headers['x-api-key'] = s.writerKey || '';
+        headers['anthropic-version'] = '2023-06-01';
+        body = {
+            model: s.writerModel,
+            max_tokens: maxTokens,
+            system,
+            messages: [{ role: 'user', content: user }],
+        };
+    } else {
         if (!/\/v1$/i.test(url)) url += '/v1';
         url += '/chat/completions';
-    }
-    const res = await fetch(url, {
-        method: 'POST',
-        signal,
-        headers: {
-            Authorization: `Bearer ${s.writerKey || ''}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            model: s.writerModel || 'gpt-4o-mini',
+        headers.Authorization = `Bearer ${s.writerKey || ''}`;
+        body = {
+            model: s.writerModel,
             messages: [
                 { role: 'system', content: system },
                 { role: 'user', content: user },
             ],
             max_tokens: maxTokens,
             temperature: 0.7,
-        }),
-    });
+        };
+    }
+    const res = await fetch(url, { method: 'POST', signal, headers, body: JSON.stringify(body) });
     const raw = await res.text();
-    if (!res.ok) throw new Error(raw.slice(0, 180) || `写词接口 ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorText(raw, res.status));
     const json = JSON.parse(raw);
+    if (anthropic) {
+        const blocks = Array.isArray(json.content) ? json.content : [];
+        return blocks.map((b) => (b && typeof b.text === 'string' ? b.text : '')).filter(Boolean).join('\n');
+    }
     return json.choices?.[0]?.message?.content || json.choices?.[0]?.text || '';
+}
+
+function apiErrorText(raw, status) {
+    try {
+        const j = JSON.parse(raw);
+        const msg = j.error?.message || j.message || (typeof j.error === 'string' ? j.error : '');
+        if (msg) return String(msg).slice(0, 180);
+    } catch {
+        /* keep raw */
+    }
+    return (raw || `写词接口 ${status}`).slice(0, 180);
+}
+
+function writerModelUrls(base) {
+    let url = base.trim().replace(/\/+$/, '').replace(/\/(chat\/completions|messages)$/i, '');
+    const urls = [];
+    if (/\/anthropic$/i.test(url)) {
+        urls.push(`${url.slice(0, -'/anthropic'.length)}/models`);
+        urls.push(`${url}/v1/models`);
+    } else if (/\/v1$/i.test(url)) {
+        urls.push(`${url}/models`);
+    } else {
+        urls.push(`${url}/v1/models`, `${url}/models`);
+    }
+    return [...new Set(urls)];
+}
+
+async function listWriterModels(base, key) {
+    let last = '没有拿到模型列表';
+    for (const url of writerModelUrls(base)) {
+        let res;
+        try {
+            res = await fetch(url, {
+                headers: {
+                    Authorization: `Bearer ${key}`,
+                    'x-api-key': key,
+                    Accept: 'application/json',
+                },
+            });
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : '';
+            if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+                throw new Error('浏览器拦下了写词接口，换一个允许网页访问的地址');
+            }
+            throw e;
+        }
+        const raw = await res.text();
+        if (!res.ok) {
+            last = apiErrorText(raw, res.status);
+            continue;
+        }
+        let json;
+        try { json = JSON.parse(raw); } catch { last = '模型列表不是 JSON'; continue; }
+        const data = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : [];
+        const ids = data.map((m) => (typeof m === 'string' ? m : m?.id)).filter(Boolean);
+        if (ids.length) return ids;
+        last = '接口连上了，但没有返回模型';
+    }
+    throw new Error(last);
+}
+
+function fillWriterModels(ids, selected) {
+    const select = document.getElementById('nano-nai-writer-model');
+    if (!select) return;
+    const cur = selected || '';
+    const list = [...new Set((ids || []).filter(Boolean))];
+    if (cur && !list.includes(cur)) list.unshift(cur);
+    select.replaceChildren();
+    if (!list.length) {
+        select.append(new Option('先点连接', ''));
+        return;
+    }
+    for (const id of list) select.append(new Option(id, id));
+    select.value = list.includes(cur) ? cur : list[0];
 }
 
 function waitCooldown(signal, onTick) {
@@ -836,9 +924,14 @@ function buildPanel() {
           <option value="custom">专用接口</option>
         </select>
       </label>
-      <label class="nano-nai-field">专用接口地址<input id="nano-nai-writer-base" type="text" placeholder="https://example.com/v1"></label>
+      <label class="nano-nai-field">专用接口地址<input id="nano-nai-writer-base" type="text" placeholder="https://api.deepseek.com/anthropic"></label>
       <label class="nano-nai-field">专用接口 Key<input id="nano-nai-writer-key" type="password" autocomplete="off"></label>
-      <label class="nano-nai-field">专用接口模型<input id="nano-nai-writer-model" type="text" placeholder="模型名"></label>
+      <div class="nano-nai-row">
+        <button type="button" class="nano-nai-btn" id="nano-nai-writer-test">连接</button>
+        <span id="nano-nai-writer-status" class="nano-nai-note">还没连接</span>
+      </div>
+      <label class="nano-nai-field">模型<select id="nano-nai-writer-model"></select></label>
+      <div class="nano-nai-note">地址里带 /anthropic 就按 Anthropic 接口写词。点连接后在这里选模型。来源会改成「专用接口」。</div>
       <h4>当前角色</h4>
       <label class="nano-nai-field">参数套<select id="nano-nai-who"></select></label>
       <div id="nano-nai-own" class="nano-nai-note"></div>
@@ -921,7 +1014,7 @@ function buildPanel() {
     document.getElementById('nano-nai-writer-mode').value = s.writerMode;
     document.getElementById('nano-nai-writer-base').value = s.writerBase;
     document.getElementById('nano-nai-writer-key').value = s.writerKey;
-    document.getElementById('nano-nai-writer-model').value = s.writerModel;
+    fillWriterModels(s.writerModels || [], s.writerModel);
 
     document.getElementById('nano-nai-enabled').addEventListener('change', (e) => {
         settings().enabled = e.target.checked;
@@ -929,12 +1022,40 @@ function buildPanel() {
         paintCooldown();
         mountAll();
     });
-    for (const [id, key] of [['nano-nai-base', 'apiBase'], ['nano-nai-key', 'apiKey'], ['nano-nai-writer-base', 'writerBase'], ['nano-nai-writer-key', 'writerKey'], ['nano-nai-writer-model', 'writerModel']]) {
+    for (const [id, key] of [['nano-nai-base', 'apiBase'], ['nano-nai-key', 'apiKey'], ['nano-nai-writer-base', 'writerBase'], ['nano-nai-writer-key', 'writerKey']]) {
         document.getElementById(id).addEventListener('input', (e) => {
             settings()[key] = e.target.value;
             ctx().saveSettingsDebounced();
         });
     }
+    document.getElementById('nano-nai-writer-model').addEventListener('change', (e) => {
+        settings().writerModel = e.target.value;
+        ctx().saveSettingsDebounced();
+    });
+    document.getElementById('nano-nai-writer-test').addEventListener('click', async () => {
+        const cur = settings();
+        const status = document.getElementById('nano-nai-writer-status');
+        status.textContent = '连接中';
+        status.className = 'nano-nai-note';
+        try {
+            if (!cur.writerBase.trim()) throw new Error('还没填专用接口地址');
+            if (!cur.writerKey.trim()) throw new Error('还没填专用接口 Key');
+            const ids = await listWriterModels(cur.writerBase, cur.writerKey);
+            cur.writerModels = ids;
+            if (!ids.includes(cur.writerModel)) cur.writerModel = ids[0];
+            cur.writerMode = 'custom';
+            document.getElementById('nano-nai-writer-mode').value = 'custom';
+            fillWriterModels(ids, cur.writerModel);
+            ctx().saveSettingsDebounced();
+            status.textContent = `已连接，${ids.length} 个模型`;
+            status.className = 'nano-nai-status-ok';
+            toast('写词接口连上了', 'success');
+        } catch (e) {
+            status.textContent = e instanceof Error ? e.message : '连不上';
+            status.className = 'nano-nai-status-wait';
+            toast(status.textContent);
+        }
+    });
     document.getElementById('nano-nai-writer-mode').addEventListener('change', (e) => {
         settings().writerMode = e.target.value;
         ctx().saveSettingsDebounced();
