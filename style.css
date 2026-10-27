@@ -1,0 +1,294 @@
+.nano-nai-settings {
+    --paper: #f4efe6;
+    --paper-2: #fbf7f0;
+    --ink: #2a2624;
+    --muted: #8a8178;
+    --line: #e0d5c8;
+    --accent: #8b4540;
+    --accent-ink: #fffaf6;
+    --good: #3d6b4f;
+    --danger: #9b3d3d;
+    margin: 8px 0 12px;
+    color: var(--ink);
+    font-family: "Iowan Old Style", Palatino, "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
+}
+
+.nano-nai-settings .inline-drawer-header,
+.nano-nai-settings .inline-drawer-content {
+    background: var(--paper) !important;
+    color: var(--ink) !important;
+    border-color: var(--line) !important;
+}
+
+.nano-nai-settings .inline-drawer {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.nano-nai-settings .inline-drawer-header b {
+    color: var(--ink);
+    letter-spacing: 0.04em;
+}
+
+.nano-nai-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px 2px 8px;
+}
+
+.nano-nai-settings h4 {
+    margin: 8px 0 4px;
+    font-size: 14px;
+    font-weight: 650;
+    color: var(--ink);
+}
+
+.nano-nai-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.nano-nai-settings label.nano-nai-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    color: var(--ink);
+    font-size: 13px;
+}
+
+.nano-nai-settings input[type="text"],
+.nano-nai-settings input[type="password"],
+.nano-nai-settings input[type="number"],
+.nano-nai-settings textarea,
+.nano-nai-settings select {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--paper-2) !important;
+    color: var(--ink) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 12px !important;
+    padding: 8px 10px !important;
+    font: inherit;
+    font-size: 14px;
+}
+
+.nano-nai-settings textarea {
+    min-height: 88px;
+    resize: vertical;
+    line-height: 1.45;
+}
+
+.nano-nai-settings input:disabled,
+.nano-nai-settings textarea:disabled {
+    opacity: 0.55;
+}
+
+.nano-nai-chip,
+.nano-nai-settings button.nano-nai-btn {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--paper-2);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.nano-nai-chip.on,
+.nano-nai-settings button.nano-nai-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}
+
+.nano-nai-note {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.nano-nai-status-ok { color: var(--good); font-weight: 650; }
+.nano-nai-status-wait { color: var(--danger); font-weight: 650; }
+
+.nano-nai-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 10px 12px;
+}
+
+.nano-nai-switch b { font-size: 15px; }
+
+.nano-nai-switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+.nano-nai-char {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.nano-nai-slot { margin-top: 8px; }
+
+.nano-nai-card {
+    --paper: #f4efe6;
+    --paper-2: #fbf7f0;
+    --ink: #2a2624;
+    --muted: #8a8178;
+    --line: #e0d5c8;
+    --accent: #8b4540;
+    --good: #3d6b4f;
+    --danger: #9b3d3d;
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 18px;
+    padding: 8px 8px 6px;
+    font-family: "Iowan Old Style", Palatino, "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
+}
+
+.nano-nai-meta {
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 2px 6px 6px;
+    word-break: break-all;
+}
+
+.nano-nai-frame {
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    background: #efe8dc;
+    min-height: 120px;
+}
+
+.nano-nai-frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.nano-nai-frame .nano-nai-ph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 160px;
+    padding: 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.nano-nai-frame .nano-nai-hit {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 28%;
+    border: 0;
+    background: transparent;
+    color: transparent;
+}
+
+.nano-nai-frame .nano-nai-hit.left { left: 0; }
+.nano-nai-frame .nano-nai-hit.right { right: 0; }
+
+.nano-nai-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    margin-top: 6px;
+}
+
+.nano-nai-actions button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12px;
+    padding: 6px 2px;
+    cursor: pointer;
+}
+
+.nano-nai-actions button:disabled { opacity: 0.4; cursor: default; }
+.nano-nai-actions button.busy { color: var(--accent); }
+.nano-nai-actions svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+.nano-nai-err {
+    color: var(--danger);
+    font-size: 12px;
+    text-align: center;
+    margin-top: 4px;
+}
+
+.nano-nai-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    background: rgba(42, 38, 36, 0.45);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 12px;
+}
+
+.nano-nai-dialog {
+    width: min(560px, 100%);
+    max-height: min(86vh, 760px);
+    overflow: auto;
+    background: #f4efe6;
+    color: #2a2624;
+    border-radius: 18px;
+    padding: 16px;
+    font-family: "Iowan Old Style", Palatino, "Songti SC", "Noto Serif SC", serif;
+}
+
+.nano-nai-dialog h3 { margin: 0 0 8px; font-size: 16px; }
+.nano-nai-dialog textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 96px;
+    background: #fbf7f0;
+    color: #2a2624;
+    border: 1px solid #e0d5c8;
+    border-radius: 12px;
+    padding: 8px 10px;
+    font: inherit;
+}
+
+.nano-nai-dialog .nano-nai-row { margin-top: 12px; }
+.nano-nai-dialog button {
+    flex: 1;
+    border-radius: 999px;
+    border: 1px solid #e0d5c8;
+    background: #fbf7f0;
+    color: #2a2624;
+    padding: 10px 12px;
+    font: inherit;
+}
+
+.nano-nai-dialog button.primary {
+    background: #8b4540;
+    border-color: #8b4540;
+    color: #fffaf6;
+}
