@@ -1,9 +1,11 @@
 import { drawImage, modelLabel, MODELS, NOISE, randomSeed, RESOLUTIONS, SAMPLERS, samplerShort, testConnection, UC, COOLDOWN_MS, FULLBODY_TAG, SENSITIVE_PREFIX, UNCENSORED_TAG } from './lib/nai.js';
-import { imageWriteMaxTokens, parseTagOutput, writerSystem, writerUser } from './lib/prompt.js';
+import { chatImageTail, imageWriteMaxTokens, parseTagOutput, splitChatPrompt, writerSystem, writerUser } from './lib/prompt.js';
 import { hasOwn, paramsFor, readSettings, uid } from './lib/settings.js';
 import { extractGrokTail, keepPresentTails, sanitizeNaiTags } from './lib/tags.js';
 
 const SLOT = 'nano-nai-slot';
+const INLINE_KEY = 'nano_nai_inline';
+const INLINE_TYPES = new Set(['normal', 'swipe', 'regenerate']);
 let booted = false;
 let arm = null;
 let cooldownUntil = 0;
@@ -431,6 +433,16 @@ async function run(mesId, mode, custom) {
         } else if (mode === 'same' && prev?.prompt) {
             grokTail = extractGrokTail(prev.prompt, params) || prev.prompt;
             charTails = { ...(prev.charTails || {}) };
+        } else if (typeof custom?.inline === 'string' && custom.inline.trim()) {
+            const parsed = parseTagOutput(custom.inline, params);
+            grokTail = parsed.base;
+            charTails = keepPresentTails(parsed.chars, parsed.presence);
+            if (!grokTail && !Object.keys(charTails).length) {
+                patch({ status: 'writing' });
+                const again = await writeTags(params, briefFor(c.chat, mesId), ac.signal);
+                grokTail = again.base;
+                charTails = keepPresentTails(again.chars, again.presence);
+            }
         } else {
             patch({ status: 'writing' });
             const parsed = await writeTags(params, briefFor(c.chat, mesId), ac.signal);
@@ -671,21 +683,71 @@ async function savePng(b64, seed, format = 'png') {
     return data.path;
 }
 
+function previousScene(chat, type) {
+    let start = (chat?.length || 0) - 1;
+    if (type === 'swipe' || type === 'regenerate') {
+        const last = chat?.[start];
+        if (last && !last.is_user) start -= 1;
+    }
+    for (let i = start; i >= 0; i--) {
+        const m = chat[i];
+        if (!m || m.is_user || m.is_system) continue;
+        const imgs = m.extra?.nano_nai?.images || [];
+        const hit = [...imgs].reverse().find((g) => g.status === 'done' && g.prompt);
+        if (hit?.prompt) return hit.prompt.trim();
+    }
+    return '';
+}
+
+function wantInline(type) {
+    const s = settings();
+    if (!s.enabled || s.writerMode !== 'st') return false;
+    if (ctx().groupId) return false;
+    return INLINE_TYPES.has(type || 'normal');
+}
+
+function syncInlinePrompt(type) {
+    const c = ctx();
+    if (typeof c.setExtensionPrompt !== 'function') return;
+    if (!wantInline(type)) {
+        c.setExtensionPrompt(INLINE_KEY, '', 1, 0, false, 0);
+        return;
+    }
+    const text = chatImageTail(liveParams(null), previousScene(c.chat || [], type));
+    c.setExtensionPrompt(INLINE_KEY, text, 1, 0, false, 0);
+}
+
+function peelInline(mesId) {
+    const c = ctx();
+    const msg = c.chat?.[mesId];
+    if (!msg?.mes) return null;
+    const split = splitChatPrompt(msg.mes);
+    if (!split.started) return null;
+    msg.mes = split.visible;
+    if (Array.isArray(msg.swipes) && Number.isInteger(msg.swipe_id)) msg.swipes[msg.swipe_id] = split.visible;
+    try { c.updateMessageBlock?.(mesId, msg); } catch (e) { console.warn(e); }
+    commit(mesId);
+    return split.prompt || '';
+}
+
 function onGenerationStarted(type, _params, dryRun) {
+    syncInlinePrompt(type);
     if (dryRun || type === 'quiet') return;
-    arm = { type: type || 'normal' };
+    arm = { type: type || 'normal', inline: wantInline(type) };
 }
 
 async function onGenerationEnded() {
     const job = arm;
     arm = null;
+    syncInlinePrompt('');
     if (!job || !settings().enabled) return;
     if (job.type === 'quiet' || job.type === 'impersonate') return;
     const c = ctx();
     const mesId = c.chat.length - 1;
     const msg = c.chat[mesId];
     if (!msg || msg.is_user || msg.is_system || msg.extra?.isSmallSys) return;
-    if (!storyText(msg.mes)) return;
+    const inlinePrompt = job.inline ? peelInline(mesId) : null;
+    if (!storyText(msg.mes) && !String(inlinePrompt || '').trim()) return;
     const stamp = String(msg.gen_finished || '');
     const pack = ensurePack(msg);
     if (job.type !== 'continue' && pack.forGen && pack.forGen !== stamp) {
@@ -694,7 +756,7 @@ async function onGenerationEnded() {
     }
     pack.forGen = stamp || String(Date.now());
     commit(mesId);
-    await run(mesId, 'auto');
+    await run(mesId, 'auto', inlinePrompt == null ? undefined : { inline: inlinePrompt });
 }
 
 function characterChoices() {
@@ -931,7 +993,7 @@ function buildPanel() {
       <h4>写提示词</h4>
       <label class="nano-nai-field">来源
         <select id="nano-nai-writer-mode">
-          <option value="st">跟酒馆当前连接（不带角色卡和预设）</option>
+          <option value="st">跟酒馆当前连接</option>
           <option value="custom">专用接口</option>
         </select>
       </label>
@@ -942,7 +1004,7 @@ function buildPanel() {
         <span id="nano-nai-writer-status" class="nano-nai-note">还没连接</span>
       </div>
       <label class="nano-nai-field">模型<select id="nano-nai-writer-model"></select></label>
-      <div class="nano-nai-note">地址里带 /anthropic 就按 Anthropic 接口写词。点连接后在这里选模型。来源会改成「专用接口」。</div>
+      <div class="nano-nai-note">选「跟酒馆当前连接」时，单人聊天会把生图规范和正文写在同一次回复里，写在最后再截下来。群聊，以及没写出标记时，仍是聊完再单独写一次。专用接口始终是聊完再写。</div>
       <h4>当前角色</h4>
       <label class="nano-nai-field">参数套<select id="nano-nai-who"></select></label>
       <div id="nano-nai-own" class="nano-nai-note"></div>
@@ -1212,7 +1274,7 @@ function boot() {
     buildPanel();
     c.eventSource.on(types.GENERATION_STARTED, onGenerationStarted);
     c.eventSource.on(types.GENERATION_ENDED, () => { void onGenerationEnded().catch((e) => console.warn(e)); });
-    c.eventSource.on(types.GENERATION_STOPPED, () => { arm = null; });
+    c.eventSource.on(types.GENERATION_STOPPED, () => { arm = null; syncInlinePrompt(''); });
     c.eventSource.on(types.CHAT_CHANGED, () => { refreshWho(); mountAll(); });
     c.eventSource.on(types.CHARACTER_MESSAGE_RENDERED, (id) => mountOne(id));
     if (types.MESSAGE_UPDATED) c.eventSource.on(types.MESSAGE_UPDATED, (id) => mountOne(id));
