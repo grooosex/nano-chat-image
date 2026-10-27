@@ -219,6 +219,7 @@ function renderCard(mesId, msg) {
     if (img?.status === 'done' && img.path) {
         const pic = document.createElement('img');
         pic.alt = '';
+        pic.referrerPolicy = 'no-referrer';
         pic.src = imgUrl(img.path);
         frame.append(pic);
         if (done.length > 1) {
@@ -303,7 +304,16 @@ function cancelJob(mesId) {
 }
 
 async function downloadImage(img) {
-    const res = await fetch(imgUrl(img.path));
+    const url = imgUrl(img.path);
+    if (/^https?:/i.test(url)) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.click();
+        return;
+    }
+    const res = await fetch(url);
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -446,7 +456,8 @@ async function run(mesId, mode, custom) {
         cooldownUntil = Date.now() + COOLDOWN_MS;
         paintCooldown();
         patch({ status: 'receiving' });
-        const path = await savePng(result.b64, result.seed);
+        const path = result.b64 ? await savePng(result.b64, result.seed) : result.remoteUrl;
+        if (!path) throw new Error('中转站没有返回图片');
         patch({ status: 'done', path, seed: result.seed, prompt: grokTail, charTails, error: '' });
     } catch (e) {
         const message = ac.signal.aborted || e?.name === 'AbortError' ? '已取消' : (e instanceof Error ? e.message : '生图失败');
